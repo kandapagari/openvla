@@ -7,12 +7,13 @@
 [![License](https://img.shields.io/github/license/TRI-ML/prismatic-vlms?style=for-the-badge)](LICENSE)
  
 [**Getting Started**](#getting-started) | [**Pretrained VLAs**](#pretrained-vlas) | [**Installation**](#installation) | [**Fine-Tuning OpenVLA via LoRA**](#fine-tuning-openvla-via-lora) | [**Fully Fine-Tuning OpenVLA**](#fully-fine-tuning-openvla) |
-[**Training VLAs from Scratch**](#training-vlas-from-scratch) | [**Project Website**](https://openvla.github.io/)
+[**Training VLAs from Scratch**](#training-vlas-from-scratch) | [**Evaluating OpenVLA**](#evaluating-openvla) | [**Project Website**](https://openvla.github.io/)
 
 
 <hr style="border: 2px solid gray;"></hr>
 
 ## Latest Updates
+- [2024-08-14] Added new section, [Evaluating OpenVLA](#evaluating-openvla), with instructions for running BridgeData V2 WidowX robot evals
 - [2024-07-08] Added new sections: [Fine-Tuning OpenVLA via LoRA](#fine-tuning-openvla-via-lora), [Fully Fine-Tuning OpenVLA](#fully-fine-tuning-openvla)
 - [2024-06-13] Initial release
 
@@ -110,21 +111,27 @@ version of this repository was developed and thoroughly tested with:
 `tokenizers` we explicitly pin the above versions of the dependencies. We are working on implementing thorough tests, 
 and plan on relaxing these constraints as soon as we can.
 
-Once PyTorch has been properly installed, you can install this package locally via an editable installation (or via 
-`pip install git+https://github.com/openvla/openvla`):
+Use the setup commands below to get started:
 
 ```bash
+# Create and activate conda environment
+conda create -n openvla python=3.10 -y
+conda activate openvla
+
+# Install PyTorch. Below is a sample command to do this, but you should check the following link
+# to find installation instructions that are specific to your compute platform:
+# https://pytorch.org/get-started/locally/
+conda install pytorch torchvision torchaudio pytorch-cuda=12.4 -c pytorch -c nvidia -y  # UPDATE ME!
+
+# Clone and install the openvla repo
+git clone https://github.com/openvla/openvla.git
 cd openvla
 pip install -e .
 
-# Training additionally requires Flash-Attention 2 (https://github.com/Dao-AILab/flash-attention)
-pip install packaging ninja
-
-# Verify Ninja --> should return exit code "0"
-ninja --version; echo $?
-
-# Install Flash Attention 2
+# Install FLash Attention 2 for training (https://github.com/Dao-AILab/flash-attention)
 #   =>> If you run into difficulty, try `pip cache remove flash_attn` first
+pip install packaging ninja
+ninja --version; echo $?  # Verify Ninja --> should return exit code "0"
 pip install "flash-attn==2.5.5" --no-build-isolation
 ```
 
@@ -419,12 +426,68 @@ AttributeError: 'DLataset' object has no attribute 'traj_map'. Did you mean: 'fl
 
 ---
 
+## Evaluating OpenVLA
+
+### BridgeData V2 WidowX Evaluations
+
+#### Setup
+
+Clone the [BridgeData V2 WidowX controller repo](https://github.com/rail-berkeley/bridge_data_robot) and install the `widowx_envs` package:
+
+```bash
+git clone https://github.com/rail-berkeley/bridge_data_robot.git
+cd bridge_data_robot
+pip install -e widowx_envs
+```
+
+Additionally, install the [`edgeml`](https://github.com/youliangtan/edgeml) library:
+```bash
+git clone https://github.com/youliangtan/edgeml.git
+cd edgeml
+pip install -e .
+```
+
+Follow the instructions in the `bridge_data_robot` README to create the Bridge WidowX Docker container.
+
+#### Launching BridgeData V2 Evaluations
+
+There are multiple ways to run BridgeData V2 evaluations. We describe the server-client method below.
+
+In one Terminal window (e.g., in tmux), start the WidowX Docker container:
+
+```bash
+cd bridge_data_robot
+./generate_usb_config.sh
+USB_CONNECTOR_CHART=$(pwd)/usb_connector_chart.yml docker compose up --build robonet
+```
+
+In a second Terminal window, run the WidowX robot server:
+
+```bash
+cd bridge_data_robot
+docker compose exec robonet bash -lic "widowx_env_service --server"
+```
+
+In a third Terminal window, run the OpenVLA policy evaluation script:
+
+```bash
+cd openvla
+python experiments/robot/bridge/run_bridgev2_eval.py \
+  --model_family openvla \
+  --pretrained_checkpoint openvla/openvla-7b
+```
+
+If you run into any problems with evaluations, please file a GitHub Issue.
+
+---
+
 ## Repository Structure
 
 High-level overview of repository/project file-tree:
 
 + `prismatic` - Package source; provides core utilities for model loading, training, data preprocessing, etc.
 + `vla-scripts/` - Core scripts for training, fine-tuning, and deploying VLAs.
++ `experiments/` - Code for evaluating OpenVLA policies in robot environments.
 + `LICENSE` - All code is made available under the MIT License; happy hacking!
 + `Makefile` - Top-level Makefile (by default, supports linting - checking & auto-fix); extend as needed.
 + `pyproject.toml` - Full project configuration details (including dependencies), as well as tool configurations.
